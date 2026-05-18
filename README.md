@@ -35,7 +35,7 @@ pip install -r requirements.txt
 Experiments are conducted on NVIDIA A100 (40GB). Same GPU and package version are recommended. 
 
 ## Prepare Datasets
-Noted that `../` is the upper directory of INP-Former code. It is where we keep all the datasets by default.
+Noted that `../` is the upper directory of STAR code. It is where we keep all the datasets by default.
 You can also alter it according to your need, just remember to modify the `data_path` in the code. 
 
 ### MVTec AD
