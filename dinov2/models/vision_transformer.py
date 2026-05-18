@@ -229,11 +229,14 @@ class DinoVisionTransformer(nn.Module):
 
     def prepare_tokens(self, x, masks=None):
         B, nc, w, h = x.shape
+        
         x = self.patch_embed(x)
         if masks is not None:
             x = torch.where(masks.unsqueeze(-1), self.mask_token.to(x.dtype).unsqueeze(0), x)
-
+       
         x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
+
+        
         x = x + self.interpolate_pos_encoding(x, w, h)
 
         if self.register_tokens is not None:

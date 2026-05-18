@@ -9,9 +9,9 @@ from torchvision.datasets import MNIST, CIFAR10, FashionMNIST, ImageFolder
 import numpy as np
 import torch.multiprocessing
 import json
+from torch.utils.data import Dataset
+import torch.nn.functional as F
 
-# import imgaug.augmenters as iaa
-# from perlin import rand_perlin_2d_np
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -30,6 +30,7 @@ def get_data_transforms(size, isize, mean_train=None, std_train=None):
         transforms.CenterCrop(isize),
         transforms.ToTensor()])
     return data_transforms, gt_transforms
+
 
 class MVTecDataset(torch.utils.data.Dataset):
     def __init__(self, root, transform, gt_transform, phase):
@@ -98,12 +99,13 @@ class MVTecDataset(torch.utils.data.Dataset):
 
 class RealIADDataset(torch.utils.data.Dataset):
     def __init__(self, root, category, transform, gt_transform, phase):
-        self.img_path = os.path.join(root, 'realiad_1024', category)
+        self.img_path = os.path.join(root, 'realiad', category)
         self.transform = transform
         self.gt_transform = gt_transform
         self.phase = phase
 
-        json_path = os.path.join(root, 'realiad_jsons', 'realiad_jsons', category + '.json')
+        #json_path = os.path.join(root, 'realiad_jsons', 'realiad_jsons', category + '.json')
+        json_path = os.path.join(root, 'realiad_jsons', category + '.json')
         with open(json_path) as file:
             class_json = file.read()
         class_json = json.loads(class_json)
@@ -112,10 +114,10 @@ class RealIADDataset(torch.utils.data.Dataset):
 
         data_set = class_json[phase]
         for sample in data_set:
-            self.img_paths.append(os.path.join(root, 'realiad_1024', category, sample['image_path']))
+            self.img_paths.append(os.path.join(root, category, sample['image_path']))
             label = sample['anomaly_class'] != 'OK'
             if label:
-                self.gt_paths.append(os.path.join(root, 'realiad_1024', category, sample['mask_path']))
+                self.gt_paths.append(os.path.join(root, category, sample['mask_path']))
             else:
                 self.gt_paths.append(None)
             self.labels.append(label)
@@ -147,6 +149,7 @@ class RealIADDataset(torch.utils.data.Dataset):
         assert img.size()[1:] == gt.size()[1:], "image.size != gt.size !!!"
 
         return img, gt, label, img_path
+
 
 
 

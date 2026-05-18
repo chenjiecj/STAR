@@ -3,6 +3,7 @@ import timm
 from torch.hub import HASH_REGEX, download_url_to_file, urlparse
 from dinov1 import vision_transformer
 from dinov2.models import vision_transformer as vision_transformer_dinov2
+# from dinov3.dinov3.models import vision_transformer as vision_transformer_dinov3
 from beit.vision_transformer import beitv2_base_patch16_448,beitv2_base_patch16_224
 import numpy as np
 from scipy import interpolate
@@ -68,6 +69,8 @@ def load(name):
                     raise ValueError("Invalid type of architecture. It must be either 'small' or 'base'.")
 
             state_dict = torch.load(ckpt_pth, map_location='cpu')
+        
+
         else:  # dinov1
             if arch == "base":
                 ckpt_pth = download_cached_file(
@@ -131,6 +134,8 @@ def load(name):
     #         state_dict = torch.load(f"{_WEIGHTS_DIR}/vit_{arch}_patchsize_{patchsize}_224.pth")
 
     model.load_state_dict(state_dict, strict=False)
+
+
     return model
 
 

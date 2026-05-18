@@ -127,40 +127,60 @@ def modify_grad_v2(x, factor):
     x *= factor
     return x
 
-def global_cosine_hm_adaptive(a, b, y=3):
-    cos_loss = torch.nn.CosineSimilarity()
-    loss = 0
-    for item in range(len(a)):
-        a_ = a[item].detach()
-        b_ = b[item]
+import torch
+import torch.nn as nn
+    
+class HybridMiningLoss(nn.Module):
+    def __init__(self, gamma=3.0, lambda_mse=0.5):
+        super().__init__()
+        self.gamma = gamma
+        self.lambda_mse = lambda_mse
+        self.cos_sim = nn.CosineSimilarity(dim=1, eps=1e-8)
+
+
+    def forward(self, student_features, teacher_features):
+        if isinstance(student_features, list):
+            total_loss = 0
+            for s, t in zip(student_features, teacher_features):
+                t_detach   = t.detach()
+                total_loss += self.compute_single_layer(s, t_detach)
+            return total_loss / len(student_features)
+        else:
+            return self.compute_single_layer(student_features, teacher_features.detach())
+
+    def compute_single_layer(self, s, t):
+        cos_dist = 1 - self.cos_sim(s, t)
+        mse_dist = torch.mean((s - t) ** 2, dim=1)
+        combined_dist = cos_dist + self.lambda_mse * mse_dist
         with torch.no_grad():
-            point_dist = 1 - cos_loss(a_, b_).unsqueeze(1).detach()
-        mean_dist = point_dist.mean()
-        # std_dist = point_dist.reshape(-1).std()
-        # thresh = torch.topk(point_dist.reshape(-1), k=int(point_dist.numel() * (1 - p)))[0][-1]
-        factor = (point_dist/mean_dist)**(y)
-        # factor = factor/torch.max(factor)
-        # factor = torch.clip(factor, min=min_grad)
-        # print(thresh)
-        loss += torch.mean(1 - cos_loss(a_.reshape(a_.shape[0], -1),
-                                        b_.reshape(b_.shape[0], -1)))
-        partial_func = partial(modify_grad_v2, factor=factor)
-        b_.register_hook(partial_func)
+            mean_dist = combined_dist.mean()
+            weights = (combined_dist / (mean_dist + 1e-8)) ** self.gamma
+            weights = weights / (weights.mean() + 1e-8)
+        loss = (weights * combined_dist).mean()
+        
+        return loss
+    
 
-    loss = loss / len(a)
-    return loss
-
+    
 def cal_anomaly_maps(fs_list, ft_list, out_size=224):
     if not isinstance(out_size, tuple):
         out_size = (out_size, out_size)
 
-    a_map_list = []
-    for i in range(len(ft_list)):
-        fs = fs_list[i]
-        ft = ft_list[i]
-        a_map = 1 - F.cosine_similarity(fs, ft)
-        # mse_map = torch.mean((fs-ft)**2, dim=1)
-        # a_map = mse_map
+    
+    if isinstance(fs_list, list):
+        a_map_list = []
+        for i in range(len(ft_list)):
+            fs = fs_list[i]
+            ft = ft_list[i]
+            a_map = 1 - F.cosine_similarity(fs, ft)
+            # mse_map = torch.mean((fs-ft)**2, dim=1)
+            # a_map = mse_map
+            a_map = torch.unsqueeze(a_map, dim=1)
+            a_map = F.interpolate(a_map, size=out_size, mode='bilinear', align_corners=True)
+            a_map_list.append(a_map)
+    else:
+        a_map_list = []
+        a_map = 1 - F.cosine_similarity(fs_list, ft_list)
         a_map = torch.unsqueeze(a_map, dim=1)
         a_map = F.interpolate(a_map, size=out_size, mode='bilinear', align_corners=True)
         a_map_list.append(a_map)
@@ -203,25 +223,18 @@ def denormalize(img):
     x = (((img.transpose(1, 2, 0) * std) + mean) * 255.).astype(np.uint8)
     return x
 
-def save_imag_ZS(imgs, anomaly_map, gt, prototype_map, save_root, img_path):
-    batch_num = imgs.shape[0]
-    for i in range(batch_num):
-        img_path_list = img_path[i].split('\\')
-        class_name, category, idx_name = img_path_list[-4], img_path_list[-2], img_path_list[-1]
-        os.makedirs(os.path.join(save_root, class_name, category), exist_ok=True)
-        input_frame = denormalize(imgs[i].clone().squeeze(0).cpu().detach().numpy())
-        cv2_input = np.array(input_frame, dtype=np.uint8)
-        plt.imsave(os.path.join(save_root, class_name, category, fr'{idx_name}_0.png'), cv2_input)
-        ano_map = anomaly_map[i].squeeze(0).cpu().detach().numpy()
-        plt.imsave(os.path.join(save_root, class_name, category, fr'{idx_name}_1.png'), ano_map, cmap='jet')
-        gt_map = gt[i].squeeze(0).cpu().detach().numpy()
-        plt.imsave(os.path.join(save_root, class_name, category, fr'{idx_name}_2.png'), gt_map, cmap='gray')
-        distance = prototype_map[i].view((28, 28)).cpu().detach().numpy()
-        distance = cv2.resize(distance, (392, 392), interpolation=cv2.INTER_AREA)
-        plt.imsave(os.path.join(save_root, class_name, category, fr'{idx_name}_3.png'), distance, cmap='jet')
-        plt.close()
+import os
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
 
-def evaluation_batch(model, dataloader, device, _class_=None, max_ratio=0, resize_mask=None):
+
+
+def norm_vis(x):
+    return (x - x.min()) / (x.max() - x.min() + 1e-6)      
+
+
+def evaluation_batch(model, dataloader, device, max_ratio=0, resize_mask=None):
     model.eval()
     gt_list_px = []
     pr_list_px = []
@@ -229,18 +242,19 @@ def evaluation_batch(model, dataloader, device, _class_=None, max_ratio=0, resiz
     pr_list_sp = []
     gaussian_kernel = get_gaussian_kernel(kernel_size=5, sigma=4).to(device)
     with torch.no_grad():
-        for img, gt, label, img_path in tqdm(dataloader, ncols=80):
+        for img, gt, label, img_path in tqdm(dataloader, desc='testing'):
             img = img.to(device)
             output = model(img)
             en, de = output[0], output[1]
             anomaly_map, _ = cal_anomaly_maps(en, de, img.shape[-1])
+            
             if resize_mask is not None:
                 anomaly_map = F.interpolate(anomaly_map, size=resize_mask, mode='bilinear', align_corners=False)
                 gt = F.interpolate(gt, size=resize_mask, mode='nearest')
             anomaly_map = gaussian_kernel(anomaly_map)
+            
             gt[gt > 0.5] = 1
             gt[gt <= 0.5] = 0
-            # gt = gt.bool()
             if gt.shape[1] > 1:
                 gt = torch.max(gt, dim=1, keepdim=True)[0]
             gt_list_px.append(gt)
@@ -273,66 +287,6 @@ def evaluation_batch(model, dataloader, device, _class_=None, max_ratio=0, resiz
 
     return [auroc_sp, ap_sp, f1_sp, auroc_px, ap_px, f1_px, aupro_px]
 
-def evaluation_batch_vis_ZS(model, dataloader, device, _class_=None, max_ratio=0, resize_mask=None, save_root=None):
-    model.eval()
-    gt_list_px = []
-    pr_list_px = []
-    gt_list_sp = []
-    pr_list_sp = []
-    gaussian_kernel = get_gaussian_kernel(kernel_size=5, sigma=4).to(device)
-    with torch.no_grad():
-        for img, gt, label, img_path in tqdm(dataloader, ncols=80):
-            img = img.to(device)
-            _ = model(img)
-            anomaly_map = model.distance
-            side = int(model.distance.shape[1]**0.5)
-            anomaly_map = anomaly_map.reshape([anomaly_map.shape[0], side, side]).contiguous()
-            anomaly_map = torch.unsqueeze(anomaly_map, dim=1)
-            anomaly_map = F.interpolate(anomaly_map, size=img.shape[-1], mode='bilinear', align_corners=True)
-            if resize_mask is not None:
-                anomaly_map = F.interpolate(anomaly_map, size=resize_mask, mode='bilinear', align_corners=False)
-                gt = F.interpolate(gt, size=resize_mask, mode='nearest')
-
-            anomaly_map = gaussian_kernel(anomaly_map)
-
-            save_imag_ZS(img, anomaly_map, gt, model.distance, save_root, img_path)
-
-            gt[gt > 0.5] = 1
-            gt[gt <= 0.5] = 0
-            # gt = gt.bool()
-            if gt.shape[1] > 1:
-                gt = torch.max(gt, dim=1, keepdim=True)[0]
-            gt_list_px.append(gt)
-            pr_list_px.append(anomaly_map)
-            gt_list_sp.append(label)
-
-            if max_ratio == 0:
-                sp_score = torch.max(anomaly_map.flatten(1), dim=1)[0]
-            else:
-                anomaly_map = anomaly_map.flatten(1)
-                sp_score = torch.sort(anomaly_map, dim=1, descending=True)[0][:, :int(anomaly_map.shape[1] * max_ratio)]
-                sp_score = sp_score.mean(dim=1)
-            pr_list_sp.append(sp_score)
-
-        gt_list_px = torch.cat(gt_list_px, dim=0)[:, 0].cpu().numpy()
-        pr_list_px = torch.cat(pr_list_px, dim=0)[:, 0].cpu().numpy()
-        gt_list_sp = torch.cat(gt_list_sp).flatten().cpu().numpy()
-        pr_list_sp = torch.cat(pr_list_sp).flatten().cpu().numpy()
-
-         # GPU acceleration
-        auroc_sp, ap_sp, f1_sp, auroc_px, ap_px, f1_px, aupro_px = ader_evaluator(pr_list_px, pr_list_sp, gt_list_px, gt_list_sp)
-
-        # Only CPU
-        # aupro_px = compute_pro(gt_list_px, pr_list_px)
-        # gt_list_px, pr_list_px = gt_list_px.ravel(), pr_list_px.ravel()
-        # auroc_px = roc_auc_score(gt_list_px, pr_list_px)
-        # auroc_sp = roc_auc_score(gt_list_sp, pr_list_sp)
-        # ap_px = average_precision_score(gt_list_px, pr_list_px)
-        # ap_sp = average_precision_score(gt_list_sp, pr_list_sp)
-        # f1_sp = f1_score_max(gt_list_sp, pr_list_sp)
-        # f1_px = f1_score_max(gt_list_px, pr_list_px)
-
-    return [auroc_sp, ap_sp, f1_sp, auroc_px, ap_px, f1_px, aupro_px]
 
 def compute_pro(masks: ndarray, amaps: ndarray, num_th: int = 200) -> None:
     """Compute the area under the curve of per-region overlaping (PRO) and 0 to 0.3 FPR
