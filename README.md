@@ -4,19 +4,37 @@
 > - STAR is built upon the pioneering work of [INPformer](https://github.com/luow23/INP-Former), to which we express our sincere gratitude for their inspiring and foundational contributions.
 
 ## Abstract
-Existing Multi-class Unsupervised Anomaly Detection (MUAD) methods that reconstruct inputs must represent the normality of diverse products, which invites identity mapping and leaks anomalies into the output. 
-Prototype-based methods mitigate this by reconstructing from normal prototypes rather than raw inputs, achieving strong MUAD performance. 
-However, existing prototype-based methods are constrained by spatial binding: their prototypes remain tied to specific image locations. 
-Although these methods successfully capture normal patterns, they implicitly encode spatial context, which compromises the representation of abstract texture patterns. 
-Consequently, when texture locations vary, the reconstructed spatial layout suffers from blurring. 
-We argue that textures, as semantic patterns, benefit from abstraction, which curbs identity mapping by eliminating pixel-wise copying. 
-In contrast, structures, as deterministic layouts, benefit from explicit encoding that mitigates structural blurring through spatial priors. 
-Motivated by this, we propose Scaffold-guided Texture Alignment and Reassembly (STAR). 
-Specifically, we introduce a Purified Prototype Extractor that applies aggressive masking to disrupt the positional continuity of normal tokens, and then captures position-agnostic normal texture prototypes from the visible ones. 
-A Semantic Purity Loss constrains these prototypes to retain semantic fidelity. 
-We further propose a Scaffold-guided Texture Reassembler, which first queries the prototypes via semantic matching and then reassembles them into a spatially coherent, structure-anchored representation under the guidance of a self-distilled scaffold.
-Since structural boundaries are challenging to anchor accurately, a Structural Fidelity Loss is introduced to focus optimization on these critical regions. 
-Experiments on MVTec-AD, VisA, and Real-IAD demonstrate that STAR achieves state-of-the-art multi-class anomaly detection performance and generalizes effectively in few-shot settings. 
+Existing Multi-class Unsupervised Anomaly Detection
+(MUAD) methods that reconstruct inputs must represent normality
+of diverse products, which invites identity mapping and leaks
+anomalies output. Prototype-based methods mitigate this by
+reconstructing from normal prototypes rather than raw inputs,
+achieving strong MUAD performance. However, existing prototype-
+based methods are constrained by spatial binding: their prototypes
+remain tied to specific image locations. Although these methods
+successfully capture normal patterns, they implicitly encode
+spatial context, which compromises the representation of abstract
+texture patterns. Consequently, when texture locations vary, the
+reconstructed spatial layout suffers from blurring. We argue
+that textures, as semantic patterns, benefit from abstraction,
+which curbs identity mapping by eliminating pixel-wise copying.
+In contrast, structures, as deterministic layouts, benefit from
+explicit encoding that mitigates structural blurring through spatial
+priors. Motivated by this, we propose Scaffold-guided Texture
+Alignment and Reassembly (STAR). Specifically, we introduce a
+Purified Prototype Extractor that applies aggressive masking to
+disrupt the positional continuity of normal tokens, then captures
+position-agnostic normal texture prototypes from visible ones.
+A Semantic Purity Loss constrains these prototypes to retain
+semantic fidelity. We further propose a Scaffold-guided Texture
+Reassembler, which first queries the prototypes via semantic
+matching and then reassembles them into a spatially coherent,
+structure-anchored representation under a self-distilled scaffold.
+Since structural boundaries are challenging to anchor accurately,
+a Structural Fidelity Loss is introduced to focus optimization
+on these critical regions. Experiments on MVTec-AD, VisA, and
+Real-IAD demonstrate STAR achieves state-of-the-art multi-class
+anomaly detection and generalizes effectively in few-shot settings. 
 
 ## Overview
 <p align="center">
