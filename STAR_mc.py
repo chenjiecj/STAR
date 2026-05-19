@@ -252,12 +252,7 @@ if __name__ == '__main__':
     parser.add_argument('--encoder', type=str, default='dinov2reg_vit_base_14') # 'dinov3_vits16' or 'dinov3_vitb16' or 'dinov3_vitl16 or dinov2reg_vit_small_14' or 'dinov2reg_vit_base_14' or 'dinov2reg_vit_large_14'
     parser.add_argument('--input_size', type=int, default=448) # '448, 512'
     parser.add_argument('--crop_size', type=int, default=392) # '392, 448'
-
     parser.add_argument('--P_num', type=int, default=6)
-    
-    parser.add_argument('--gamma', type=float, default=3)
-    parser.add_argument('--lambda_mse', type=float, default=0.5) 
-
 
     # training info
     parser.add_argument('--total_epochs', type=int, default=200)
